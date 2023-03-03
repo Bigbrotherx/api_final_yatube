@@ -3,7 +3,7 @@ import base64
 from django.core.files.base import ContentFile
 from rest_framework import serializers
 from rest_framework.relations import SlugRelatedField
-
+from rest_framework.serializers import UniqueTogetherValidator
 
 from posts.models import Comment, Post, Group, Follow, User
 
@@ -31,7 +31,7 @@ class PostSerializer(serializers.ModelSerializer):
 
 class CommentSerializer(serializers.ModelSerializer):
     """Сериалайзер модели Comment"""
-    author = serializers.SlugRelatedField(
+    author = SlugRelatedField(
         read_only=True, slug_field='username'
     )
 
@@ -51,11 +51,28 @@ class GroupSerializer(serializers.ModelSerializer):
 
 class FollowSerializer(serializers.ModelSerializer):
     """Сериалайзер модели Follow"""
-    user = serializers.SlugRelatedField(slug_field='username', read_only=True)
-    following = serializers.SlugRelatedField(
+    user = SlugRelatedField(
+        slug_field='username',
+        read_only=True,
+        default=serializers.CurrentUserDefault()
+    )
+    following = SlugRelatedField(
         slug_field='username', queryset=User.objects.all())
 
     class Meta:
         fields = ('user', 'following', )
-        read_only_fields = ('user',)
         model = Follow
+        validators = [
+            UniqueTogetherValidator(
+                queryset=model.objects.all(),
+                fields=('user', 'following'),
+                message='Вы уже подписанны на этого автора!',
+            ),
+        ]
+
+    def validate(self, data):
+        if data['following'] == self.context['request'].user:
+            raise serializers.ValidationError(
+                'Нельзя подписаться на самого себя!')
+
+        return data
